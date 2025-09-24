@@ -1,88 +1,155 @@
 #!/bin/bash
 
 # ==============================================================================
-# 独角数卡 (Dujiaoka) ARM 架构 VPS 一键部署脚本
+# 独角数卡 (Dujiaoka) ARM VPS 终极部署一键脚本
 #
 # 功能:
-# 1. 自动检测并安装 Docker, Docker Compose, Git。
-# 2. 从 GitHub 克隆最新的 Dujiaoka 源代码。
-# 3. 交互式地获取用户域名和数据库密码。
-# 4. 自动创建 docker-compose.yml, Dockerfile, Caddyfile。
-# 5. 自动构建 Docker 镜像、启动所有服务、并完成初始化。
+#   - 自动安装 Docker 和 Git
+#   - 自动下载源码
+#   - 自动生成包含所有修正的配置文件 (Dockerfile, docker-compose.yml等)
+#   - 自动构建容器并初始化
+#   - 自动处理文件权限问题
+#   - 自动跳过Web安装并强制重置管理员密码
 #
+# 作者: Gemini (根据与用户的调试过程整理)
 # ==============================================================================
 
-# 定义颜色
+# 设置颜色
 GREEN="\033[32m"
 RED="\033[31m"
 YELLOW="\033[33m"
+BLUE="\033[34m"
 PLAIN="\033[0m"
 
-echo -e "${GREEN}独角数卡 ARM 架构 VPS 一键部署脚本即将开始...${PLAIN}"
+# 确保脚本以root权限运行
+if [ "$EUID" -ne 0 ]; then
+  echo -e "${RED}错误: 请以root权限运行此脚本。${PLAIN}"
+  exit 1
+fi
 
-# --- 函数定义 ---
+# 函数：打印信息
+info() {
+    echo -e "${GREEN}[信息] $1${PLAIN}"
+}
 
-# 检查并安装依赖
+# 函数：打印警告
+warn() {
+    echo -e "${YELLOW}[警告] $1${PLAIN}"
+}
+
+# 函数：打印错误并退出
+error() {
+    echo -e "${RED}[错误] $1${PLAIN}"
+    exit 1
+}
+
+# 函数：检查并安装依赖
 check_and_install_deps() {
-    echo -e "${YELLOW}正在检查并安装必要的依赖...${PLAIN}"
-    
-    # 检查 Git
-    if ! command -v git &> /dev/null; then
-        echo "未检测到 Git，正在安装..."
-        apt-get update && apt-get install -y git
+    info "正在检查系统依赖 (git, curl, docker)..."
+    if ! command -v git &> /dev/null || ! command -v curl &> /dev/null || ! command -v docker &> /dev/null; then
+        warn "部分依赖未安装，正在尝试自动安装..."
+        if command -v apt-get &> /dev/null; then
+            apt-get update
+            apt-get install -y git curl
+            curl -fsSL https://get.docker.com -o get-docker.sh
+            sh get-docker.sh
+            apt-get install -y docker-compose
+            systemctl start docker
+            systemctl enable docker
+        else
+            error "不支持的操作系统。请手动安装 git, curl, 和 Docker。"
+        fi
     fi
-
-    # 检查 Docker
-    if ! command -v docker &> /dev/null; then
-        echo "未检测到 Docker，正在安装..."
-        curl -fsSL https://get.docker.com -o get-docker.sh
-        sh get-docker.sh
-        rm get-docker.sh
-    fi
-
-    # 检查 Docker Compose
-    if ! command -v docker-compose &> /dev/null; then
-        echo "未检测到 Docker Compose，正在安装..."
-        curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-        chmod +x /usr/local/bin/docker-compose
-    fi
-    
-    echo -e "${GREEN}所有依赖已准备就绪。${PLAIN}"
+    info "所有依赖已满足。"
 }
 
-# 获取用户输入
-get_user_input() {
-    echo -e "${YELLOW}请输入部署所需的配置信息:${PLAIN}"
-    read -p "请输入您准备好的域名 (例如 shop.yourdomain.com): " DOMAIN_NAME
-    while [ -z "${DOMAIN_NAME}" ]; do
-        echo -e "${RED}域名不能为空，请重新输入!${PLAIN}"
-        read -p "请输入您准备好的域名 (例如 shop.yourdomain.com): " DOMAIN_NAME
-    done
+# --- 脚本主逻辑开始 ---
 
-    read -sp "请为数据库设置一个复杂的密码: " DB_PASSWORD
-    while [ -z "${DB_PASSWORD}" ]; do
-        echo -e "\n${RED}数据库密码不能为空，请重新输入!${PLAIN}"
-        read -sp "请为数据库设置一个复杂的密码: " DB_PASSWORD
-    done
-    echo "" # 换行
-}
+clear
+echo -e "${BLUE}=====================================================${PLAIN}"
+echo -e "${BLUE}    欢迎使用独角数卡终极部署一键脚本 v1.0      ${PLAIN}"
+echo -e "${BLUE}=====================================================${PLAIN}"
+echo
 
-# --- 主逻辑 ---
-
-# 1. 准备工作
+# 1. 检查依赖
 check_and_install_deps
-get_user_input
 
-# 2. 获取源代码
-echo -e "${YELLOW}正在从 GitHub 克隆独角数卡源代码...${PLAIN}"
+# 2. 收集用户信息
+info "请输入您的配置信息："
+read -p "请输入您的网站域名 (例如: shop.yourdomain.com): " DOMAIN_NAME
+if [ -z "$DOMAIN_NAME" ]; then
+    error "域名不能为空！"
+fi
+
+read -p "请输入您要设置的后台管理员密码 (默认: Admin888): " ADMIN_PASSWORD
+ADMIN_PASSWORD=${ADMIN_PASSWORD:-Admin888}
+
+read -p "请输入数据库密码 (默认: abc@123$): " DB_PASSWORD
+DB_PASSWORD=${DB_PASSWORD:-"050148Sq$"}
+
+INSTALL_DIR="/root"
+info "源码将安装在 $INSTALL_DIR 目录下。"
+echo
+
+# 3. 下载源码
+info "正在从 GitHub 下载独角数卡源码..."
+cd "$INSTALL_DIR" || exit 1
+if [ -d "dujiaoka" ]; then
+    warn "dujiaoka 目录已存在，将进行覆盖安装。"
+    rm -rf dujiaoka
+fi
 git clone https://github.com/assimon/dujiaoka.git
-cd dujiaoka
+cd dujiaoka || error "进入 dujiaoka 目录失败。"
+info "源码下载完成。"
 
-# 3. 创建配置文件
-echo -e "${YELLOW}正在根据您的输入创建配置文件...${PLAIN}"
+# 4. 创建配置文件
+info "正在创建并修正配置文件..."
 
-# 创建 docker-compose.yml
-cat <<EOF > docker-compose.yml
+# --- 创建 Dockerfile ---
+cat > Dockerfile << EOF
+# 使用官方的、支持 ARM 架构的 PHP-FPM 镜像作为基础
+FROM php:7.4-fpm-buster
+
+# 设置工作目录
+WORKDIR /var/www/html
+
+# --- [核心修复] ---
+# 由于 Debian "Buster" 已过期，其软件源已失效。
+# 我们需要将软件源地址修改为 Debian 的存档服务器地址。
+RUN sed -i -e 's/deb.debian.org/archive.debian.org/g' \
+    -e 's|security.debian.org/debian-security|archive.debian.org/debian-security|g' \
+    -e '/buster-updates/d' /etc/apt/sources.list
+# --- [核心修复结束] ---
+
+# 更新包列表并安装编译 PHP 扩展所需的系统依赖
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    libpng-dev \
+    libonig-dev \
+    libxml2-dev \
+    zip \
+    unzip \
+    libzip-dev
+
+# 安装 Dujiaoka 所需的 PHP 扩展
+RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip
+
+# 安装 Redis 扩展
+RUN pecl install -o -f redis \
+    && rm -rf /tmp/pear \
+    && docker-php-ext-enable redis
+
+# 安装 Composer (PHP 依赖管理器)
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+
+# 更改目录所有者为 www-data，以便 Caddy 和 PHP-FPM 进程可以读写
+RUN chown -R www-data:www-data /var/www/html
+EOF
+info "Dockerfile 创建成功。"
+
+# --- 创建 docker-compose.yml ---
+cat > docker-compose.yml << EOF
 services:
   app:
     build:
@@ -136,56 +203,70 @@ volumes:
   caddy_data:
   caddy_config:
 EOF
+info "docker-compose.yml 创建成功。"
 
-# 创建 Dockerfile
-cat <<EOF > Dockerfile
-FROM php:7.4-fpm-buster
-WORKDIR /var/www/html
-RUN sed -i -e 's/deb.debian.org/archive.debian.org/g' \
-       -e 's|security.debian.org/debian-security|archive.debian.org/debian-security|g' \
-       -e '/buster-updates/d' /etc/apt/sources.list
-RUN apt-get update && apt-get install -y \
-    git curl libpng-dev libonig-dev libxml2-dev zip unzip libzip-dev
-RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip
-RUN pecl install -o -f redis && rm -rf /tmp/pear && docker-php-ext-enable redis
-RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-RUN chown -R www-data:www-data /var/www/html
-EOF
-
-# 创建 Caddyfile
-cat <<EOF > Caddyfile
+# --- 创建 Caddyfile ---
+cat > Caddyfile << EOF
 ${DOMAIN_NAME} {
     root * /var/www/html/public
     php_fastcgi app:9000
     file_server
 }
 EOF
+info "Caddyfile 创建成功。"
 
-echo -e "${GREEN}所有配置文件已创建成功！${PLAIN}"
+# --- 创建 .env 文件 ---
+cp .env.example .env
+sed -i "s|APP_URL=http://localhost|APP_URL=https://${DOMAIN_NAME}|g" .env
+sed -i "s|DB_PASSWORD=|DB_PASSWORD=${DB_PASSWORD}|g" .env
+sed -i "s|ADMIN_HTTPS=false|ADMIN_HTTPS=true|g" .env
+info ".env 文件创建并修正成功。"
 
-# 4. 构建、启动与初始化
-echo -e "${YELLOW}正在构建 Docker 镜像，这个过程会比较长，请耐心等待...${PLAIN}"
+# 5. 构建和初始化
+info "正在构建并启动 Docker 容器，这可能需要几分钟..."
 docker-compose up -d --build
+info "容器启动成功。等待数据库初始化..."
+sleep 30
 
-echo -e "${YELLOW}正在安装 PHP 依赖包...${PLAIN}"
-docker-compose exec app composer install --ignore-platform-reqs
+# 6. 修复权限并初始化应用
+info "正在设置文件权限..."
+mkdir -p storage/logs
+chown -R 33:33 .
+chmod -R 777 storage bootstrap/cache
+info "文件权限设置完成。"
 
-echo -e "${YELLOW}正在设置文件权限...${PLAIN}"
-docker-compose exec app chown -R www-data:www-data /var/www/html
+info "正在安装PHP依赖并初始化应用..."
+docker-compose exec app composer install --no-dev -o
+docker-compose exec app php artisan key:generate --force
+docker-compose exec app php artisan migrate --force
+docker-compose exec app php artisan config:clear
+info "应用初始化完成。"
 
-# 5. 完成提示
-echo -e "${GREEN}===================================================================${PLAIN}"
-echo -e "${GREEN}🎉 恭喜您！独角数卡已成功部署！ 🎉${PLAIN}"
-echo -e "${GREEN}===================================================================${PLAIN}"
-echo -e "${YELLOW}请立即执行以下后续步骤:${PLAIN}"
-echo -e "1. ${GREEN}请确保您的域名 ${DOMAIN_NAME} 已正确解析到本服务器 IP。${PLAIN}"
-echo -e "2. ${GREEN}请确保您服务器的防火墙（安全组）已开放 80 和 443 端口。${PLAIN}"
-echo -e "3. 打开浏览器，访问 ${GREEN}https://${DOMAIN_NAME}${PLAIN}"
-echo -e "4. 在安装向导中，填写以下信息:"
-echo -e "   - MySQL 数据库地址: ${GREEN}db${PLAIN}"
-echo -e "   - MySQL 用户名: ${GREEN}dujiaoka${PLAIN}"
-echo -e "   - MySQL 密码: ${GREEN}您刚才设置的密码${PLAIN}"
-echo -e "   - Redis 连接地址: ${GREEN}redis${PLAIN}"
-echo -e "   - 网站 url: ${GREEN}https://${DOMAIN_NAME}${PLAIN}"
-echo -e "5. 安装完成后，登录后台，在 ${YELLOW}配置 -> 系统设置${PLAIN} 中再次确认网站 URL 正确无误。"
-echo -e "${GREEN}祝您使用愉快！${PLAIN}"
+# 7. 自动重置管理员密码
+info "正在自动重置管理员密码..."
+docker-compose exec app php artisan db:seed --class=AdminTablesSeeder > /dev/null 2>&1
+docker-compose exec -T app php artisan tinker <<EOF
+\$user = Dcat\Admin\Models\Administrator::where('username', 'admin')->first();
+\$user->password = bcrypt('${ADMIN_PASSWORD}');
+\$user->save();
+exit
+EOF
+info "管理员密码重置成功。"
+
+# 8. 创建安装锁定文件
+info "正在创建安装锁定文件以跳过Web安装..."
+touch public/install.lock
+
+# 9. 完成
+clear
+echo -e "${GREEN}=====================================================${PLAIN}"
+echo -e "${GREEN}    🎉 恭喜！独角数卡已成功部署并完成所有修正！  🎉    ${PLAIN}"
+echo -e "${GREEN}=====================================================${PLAIN}"
+echo
+echo -e "后台登录地址: ${YELLOW}https://${DOMAIN_NAME}/admin${PLAIN}"
+echo -e "用户名:         ${YELLOW}admin${PLAIN}"
+echo -e "密码:           ${YELLOW}${ADMIN_PASSWORD}${PLAIN}"
+echo
+echo -e "您可以将此脚本上传到 GitHub，方便在其他VPS上快速部署。"
+echo -e "祝您使用愉快！"
+echo
