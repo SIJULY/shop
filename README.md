@@ -17,7 +17,7 @@ Caddy 自动 HTTPS: 使用 Caddy 作为网页服务器，自动为您配置 SSL 
 
 请将下面的命令中的 你的用户名 和 你的仓库名 替换为您自己的 GitHub 用户名和仓库名。
 
-wget [https://raw.githubusercontent.com/你的用户名/你的仓库名/main/install.sh](https://raw.githubusercontent.com/你的用户名/你的仓库名/main/install.sh) && chmod +x install.sh && ./install.sh
+wget [https://raw.githubusercontent.com/SIJULY/shop/main/install.sh](https://raw.githubusercontent.com/SIJULY/shop/main/install.sh) && chmod +x install.sh && ./install.sh
 
 📋 脚本执行流程
 环境检查: 自动检查并安装 Docker, Docker Compose, Git。
