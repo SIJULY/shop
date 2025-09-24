@@ -1,4 +1,5 @@
 独角数卡一键部署脚本 (ARM 架构专用)
+
 这是一个用于在基于 Debian/Ubuntu 的 ARM 架构 VPS 上一键部署“独角数卡”项目的 Shell 脚本。
 
 脚本会自动处理所有依赖安装、文件配置、镜像构建和项目初始化工作。
@@ -13,11 +14,16 @@ ARM 架构适配: 解决了在 ARM VPS 上部署时可能遇到的所有已知�
 Caddy 自动 HTTPS: 使用 Caddy 作为网页服务器，自动为您配置 SSL 证书，实现 HTTPS 加密访问。
 
 🚀 使用方法
-在您全新的、纯净的 ARM VPS 上，只需一行命令即可开始部署。
+在您全新的、纯净的 ARM VPS 上，只需下列命令即可开始部署。
 
-请将下面的命令中的 你的用户名 和 你的仓库名 替换为您自己的 GitHub 用户名和仓库名。
+1、使用 wget 或 curl 命令直接从代码托管地址下载原始文件，这是最干净、最保险的方式。
+wget https://raw.githubusercontent.com/SIJULY/shop/main/install.sh
 
-wget [https://raw.githubusercontent.com/SIJULY/shop/main/install.sh](https://raw.githubusercontent.com/SIJULY/shop/main/install.sh) && chmod +x install.sh && ./install.sh
+2、赋予脚本执行权限
+chmod +x install.sh
+
+3、安装的脚本文件。
+./install.sh
 
 📋 脚本执行流程
 环境检查: 自动检查并安装 Docker, Docker Compose, Git。
