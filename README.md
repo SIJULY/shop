@@ -16,13 +16,16 @@ Caddy 自动 HTTPS: 使用 Caddy 作为网页服务器，自动为您配置 SSL 
 🚀 使用方法
 在您全新的、纯净的 ARM VPS 上，只需下列命令即可开始部署。
 
-1、使用 wget 或 curl 命令直接从代码托管地址下载原始文件，这是最干净、最保险的方式。
+1、使用 wget 或 curl 命令直接从代码托管地址下载原始文件：
+
 wget https://raw.githubusercontent.com/SIJULY/shop/main/install.sh
 
-2、赋予脚本执行权限
+2、赋予脚本执行权限：
+
 chmod +x install.sh
 
-3、安装的脚本文件。
+3、安装的脚本文件：
+
 ./install.sh
 
 📋 脚本执行流程
