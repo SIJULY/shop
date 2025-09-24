@@ -10,10 +10,6 @@
 # 4. 自动创建 docker-compose.yml, Dockerfile, Caddyfile。
 # 5. 自动构建 Docker 镜像、启动所有服务、并完成初始化。
 #
-# 使用方法:
-# wget https://raw.githubusercontent.com/你的用户名/你的仓库名/main/install.sh
-# chmod +x install.sh
-# ./install.sh
 # ==============================================================================
 
 # 定义颜色
