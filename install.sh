@@ -11,7 +11,7 @@
 #   - 自动处理文件权限问题
 #   - 自动跳过Web安装并强制重置管理员密码
 #
-# 作者: 小龙女她爸 
+# 作者: 小龙女她爸
 # ==============================================================================
 
 # 设置颜色
@@ -56,12 +56,16 @@ check_and_install_deps() {
             # 使用官方脚本安装最新版 Docker，它会自动包含 compose 插件
             curl -fsSL https://get.docker.com -o get-docker.sh
             sh get-docker.sh
-            # 删除了错误的 apt-get install -y docker-compose
             systemctl start docker
             systemctl enable docker
             # 再次检查
             if ! (command -v docker &> /dev/null && docker compose version &> /dev/null); then
-                error "Docker Compose (v2) 安装失败，请手动安装后再运行脚本。"
+                # 如果 get-docker.sh 没能装上 compose 插件，就手动装一次
+                warn "正在尝试手动安装 docker-compose-plugin..."
+                apt-get install -y docker-compose-plugin
+                if ! (command -v docker &> /dev/null && docker compose version &> /dev/null); then
+                   error "Docker Compose (v2) 安装失败，请手动安装后再运行脚本。"
+                fi
             fi
         else
             error "不支持的操作系统。请手动安装 git, curl, 和最新版 Docker (包含 Compose v2)。"
@@ -188,9 +192,8 @@ services:
     image: mariadb:10.8
     container_name: dujiaoka_db
     restart: always
-    user: root
     environment:
-      MYSQL_ROOT_PASSWORD: "your_strong_root_password"
+      MYSQL_ROOT_PASSWORD: "${DB_PASSWORD}"
       MYSQL_DATABASE: "dujiaoka"
       MYSQL_USER: "dujiaoka"
       MYSQL_PASSWORD: "${DB_PASSWORD}"
@@ -224,31 +227,40 @@ info "Caddyfile 创建成功。"
 
 # --- 创建 .env 文件 (修正) ---
 cp .env.example .env
-# 修复：使用更健壮的 sed 命令来替换 DB_PASSWORD
-sed -i "s/^DB_PASSWORD=.*/DB_PASSWORD=${DB_PASSWORD}/" .env
-# 确保 DB_USERNAME 和 DB_DATABASE 也匹配
-sed -i "s/^DB_USERNAME=.*/DB_USERNAME=dujiaoka/" .env
+sed -i "s/^APP_URL=.*/APP_URL=http:\/\/${DOMAIN_NAME}/" .env
+sed -i "s/^DB_HOST=.*/DB_HOST=db/" .env
 sed -i "s/^DB_DATABASE=.*/DB_DATABASE=dujiaoka/" .env
+sed -i "s/^DB_USERNAME=.*/DB_USERNAME=dujiaoka/" .env
+sed -i "s/^DB_PASSWORD=.*/DB_PASSWORD=${DB_PASSWORD}/" .env
+sed -i "s/^REDIS_HOST=.*/REDIS_HOST=redis/" .env
 info ".env 文件创建并修正成功。"
 
 # --- 修正2: 将所有 'docker-compose' 命令更新为 'docker compose' ---
 # 5. 构建和初始化
 info "正在构建并启动 Docker 容器，这可能需要几分钟..."
 docker compose up -d --build
-info "容器启动成功。等待数据库初始化..."
+if [ $? -ne 0 ]; then
+    error "Docker 容器构建或启动失败。请检查上面的错误信息。"
+fi
 
-# 修复：增加数据库就绪检查
-until docker compose exec db mysqladmin ping -hlocalhost -u root -p"${DB_PASSWORD}" &> /dev/null; do
+info "容器启动成功。等待数据库初始化..."
+# 修复：增加数据库就绪检查，增加超时
+count=0
+until docker compose exec db mysqladmin ping -hlocalhost --silent; do
   echo -n "."
   sleep 1
+  count=$((count+1))
+  if [ $count -ge 60 ]; then
+    error "数据库等待超时。请检查 'dujiaoka_db' 容器的日志。命令: docker logs dujiaoka_db"
+  fi
 done
 echo -e "\n数据库服务已就绪。"
 
 # 6. 修复权限并初始化应用
 info "正在设置文件权限..."
-mkdir -p storage/logs
-chown -R 33:33 .
-chmod -R 777 storage bootstrap/cache
+# 修复了权限问题，确保容器内用户可以写入
+docker compose exec -u root app chown -R www-data:www-data /var/www/html
+docker compose exec -u root app chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 info "文件权限设置完成。"
 
 info "正在安装PHP依赖并初始化应用..."
@@ -260,23 +272,25 @@ info "应用初始化完成。"
 
 # 7. 自动重置管理员密码
 info "正在自动重置管理员密码..."
-docker compose exec app php artisan db:seed --class=AdminTablesSeeder > /dev/null 2>&1
+docker compose exec app php artisan db:seed --class=AdminTablesSeeder
 docker compose exec -T app php artisan tinker <<EOF
 \$user = Dcat\Admin\Models\Administrator::where('username', 'admin')->first();
-\$user->password = bcrypt('${ADMIN_PASSWORD}');
-\$user->save();
+if (\$user) {
+    \$user->password = bcrypt('${ADMIN_PASSWORD}');
+    \$user->save();
+}
 exit
 EOF
 info "管理员密码重置成功。"
 
 # 8. 创建安装锁定文件
 info "正在创建安装锁定文件以跳过Web安装..."
-touch public/install.lock
+docker compose exec app touch public/install.lock
 
 # 9. 完成
 clear
 echo -e "${GREEN}=====================================================${PLAIN}"
-echo -e "${GREEN}     🎉 恭喜！独角数卡已成功部署并完成所有修正！ 🎉      ${PLAIN}"
+echo -e "${GREEN}          🎉 恭喜！独角数卡已成功部署！ 🎉               ${PLAIN}"
 echo -e "${GREEN}=====================================================${PLAIN}"
 echo
 echo -e "后台登录地址: ${YELLOW}https://${DOMAIN_NAME}/admin${PLAIN}"
