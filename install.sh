@@ -1,17 +1,17 @@
 #!/bin/bash
 
 # ==============================================================================
-# 独角数卡 (Dujiaoka) ARM VPS 终极部署一键脚本 (修正版)
+# 独角数卡 (Dujiaoka) ARM VPS 终极部署一键脚本 (v1.2 修正版)
 #
 # 功能:
-#   - 自动安装 Docker 和 Git
+#   - 自动安装最新版 Docker 和 Docker Compose
 #   - 自动下载源码
 #   - 自动生成包含所有修正的配置文件 (Dockerfile, docker-compose.yml等)
 #   - 自动构建容器并初始化
 #   - 自动处理文件权限问题
 #   - 自动跳过Web安装并强制重置管理员密码
 #
-# 作者: 小龙女她爸
+# 作者: 小龙女她爸 
 # ==============================================================================
 
 # 设置颜色
@@ -43,21 +43,28 @@ error() {
     exit 1
 }
 
+# --- 修正1: 优化依赖检查与安装逻辑 ---
 # 函数：检查并安装依赖
 check_and_install_deps() {
     info "正在检查系统依赖 (git, curl, docker)..."
-    if ! command -v git &> /dev/null || ! command -v curl &> /dev/null || ! command -v docker &> /dev/null; then
-        warn "部分依赖未安装，正在尝试自动安装..."
+    # 检查 docker compose 命令，注意是带空格的
+    if ! command -v git &> /dev/null || ! command -v curl &> /dev/null || ! (command -v docker &> /dev/null && docker compose version &> /dev/null); then
+        warn "部分依赖未安装或 Docker Compose (v2) 不可用，正在尝试自动安装..."
         if command -v apt-get &> /dev/null; then
             apt-get update
             apt-get install -y git curl
+            # 使用官方脚本安装最新版 Docker，它会自动包含 compose 插件
             curl -fsSL https://get.docker.com -o get-docker.sh
             sh get-docker.sh
-            apt-get install -y docker-compose
+            # 删除了错误的 apt-get install -y docker-compose
             systemctl start docker
             systemctl enable docker
+            # 再次检查
+            if ! (command -v docker &> /dev/null && docker compose version &> /dev/null); then
+                error "Docker Compose (v2) 安装失败，请手动安装后再运行脚本。"
+            fi
         else
-            error "不支持的操作系统。请手动安装 git, curl, 和 Docker。"
+            error "不支持的操作系统。请手动安装 git, curl, 和最新版 Docker (包含 Compose v2)。"
         fi
     fi
     info "所有依赖已满足。"
@@ -67,7 +74,7 @@ check_and_install_deps() {
 
 clear
 echo -e "${BLUE}=====================================================${PLAIN}"
-echo -e "${BLUE}    欢迎使用独角数卡终极部署一键脚本 v1.1          ${PLAIN}"
+echo -e "${BLUE}    欢迎使用独角数卡终极部署一键脚本 v1.2 (修正版)      ${PLAIN}"
 echo -e "${BLUE}=====================================================${PLAIN}"
 echo
 
@@ -224,13 +231,14 @@ sed -i "s/^DB_USERNAME=.*/DB_USERNAME=dujiaoka/" .env
 sed -i "s/^DB_DATABASE=.*/DB_DATABASE=dujiaoka/" .env
 info ".env 文件创建并修正成功。"
 
+# --- 修正2: 将所有 'docker-compose' 命令更新为 'docker compose' ---
 # 5. 构建和初始化
 info "正在构建并启动 Docker 容器，这可能需要几分钟..."
-docker-compose up -d --build
+docker compose up -d --build
 info "容器启动成功。等待数据库初始化..."
 
 # 修复：增加数据库就绪检查
-until docker-compose exec db mysqladmin ping -hlocalhost -u root -p"${DB_PASSWORD}" &> /dev/null; do
+until docker compose exec db mysqladmin ping -hlocalhost -u root -p"${DB_PASSWORD}" &> /dev/null; do
   echo -n "."
   sleep 1
 done
@@ -244,16 +252,16 @@ chmod -R 777 storage bootstrap/cache
 info "文件权限设置完成。"
 
 info "正在安装PHP依赖并初始化应用..."
-docker-compose exec app composer install --no-dev -o
-docker-compose exec app php artisan key:generate --force
-docker-compose exec app php artisan migrate --force
-docker-compose exec app php artisan config:clear
+docker compose exec app composer install --no-dev -o
+docker compose exec app php artisan key:generate --force
+docker compose exec app php artisan migrate --force
+docker compose exec app php artisan config:clear
 info "应用初始化完成。"
 
 # 7. 自动重置管理员密码
 info "正在自动重置管理员密码..."
-docker-compose exec app php artisan db:seed --class=AdminTablesSeeder > /dev/null 2>&1
-docker-compose exec -T app php artisan tinker <<EOF
+docker compose exec app php artisan db:seed --class=AdminTablesSeeder > /dev/null 2>&1
+docker compose exec -T app php artisan tinker <<EOF
 \$user = Dcat\Admin\Models\Administrator::where('username', 'admin')->first();
 \$user->password = bcrypt('${ADMIN_PASSWORD}');
 \$user->save();
@@ -268,13 +276,12 @@ touch public/install.lock
 # 9. 完成
 clear
 echo -e "${GREEN}=====================================================${PLAIN}"
-echo -e "${GREEN}    🎉 恭喜！独角数卡已成功部署并完成所有修正！  🎉    ${PLAIN}"
+echo -e "${GREEN}     🎉 恭喜！独角数卡已成功部署并完成所有修正！ 🎉      ${PLAIN}"
 echo -e "${GREEN}=====================================================${PLAIN}"
 echo
 echo -e "后台登录地址: ${YELLOW}https://${DOMAIN_NAME}/admin${PLAIN}"
 echo -e "用户名:           ${YELLOW}admin${PLAIN}"
 echo -e "密码:             ${YELLOW}${ADMIN_PASSWORD}${PLAIN}"
 echo
-echo -e "您可以将此脚本上传到 GitHub，方便在其他VPS上快速部署。"
+echo -e "此修正脚本现在可以安全地在其他VPS上快速部署。"
 echo -e "祝您使用愉快！"
-echo
