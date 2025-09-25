@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==============================================================================
-# 独角数卡 (Dujiaoka) ARM VPS 终极部署一键脚本
+# 独角数卡 (Dujiaoka) ARM VPS 终极部署一键脚本 (修正版)
 #
 # 功能:
 #   - 自动安装 Docker 和 Git
@@ -11,7 +11,7 @@
 #   - 自动处理文件权限问题
 #   - 自动跳过Web安装并强制重置管理员密码
 #
-# 作者: Gemini (根据与用户的调试过程整理)
+# 作者: 小龙女她爸
 # ==============================================================================
 
 # 设置颜色
@@ -23,8 +23,8 @@ PLAIN="\033[0m"
 
 # 确保脚本以root权限运行
 if [ "$EUID" -ne 0 ]; then
-  echo -e "${RED}错误: 请以root权限运行此脚本。${PLAIN}"
-  exit 1
+    echo -e "${RED}错误: 请以root权限运行此脚本。${PLAIN}"
+    exit 1
 fi
 
 # 函数：打印信息
@@ -67,7 +67,7 @@ check_and_install_deps() {
 
 clear
 echo -e "${BLUE}=====================================================${PLAIN}"
-echo -e "${BLUE}    欢迎使用独角数卡终极部署一键脚本 v1.0      ${PLAIN}"
+echo -e "${BLUE}    欢迎使用独角数卡终极部署一键脚本 v1.1          ${PLAIN}"
 echo -e "${BLUE}=====================================================${PLAIN}"
 echo
 
@@ -84,7 +84,7 @@ fi
 read -p "请输入您要设置的后台管理员密码 (默认: Admin888): " ADMIN_PASSWORD
 ADMIN_PASSWORD=${ADMIN_PASSWORD:-Admin888}
 
-read -p "请输入数据库密码 (默认: abc@123$): " DB_PASSWORD
+read -p "请输入数据库密码 (默认: 050148Sq$): " DB_PASSWORD
 DB_PASSWORD=${DB_PASSWORD:-"050148Sq$"}
 
 INSTALL_DIR="/root"
@@ -215,18 +215,26 @@ ${DOMAIN_NAME} {
 EOF
 info "Caddyfile 创建成功。"
 
-# --- 创建 .env 文件 ---
+# --- 创建 .env 文件 (修正) ---
 cp .env.example .env
-sed -i "s|APP_URL=http://localhost|APP_URL=https://${DOMAIN_NAME}|g" .env
-sed -i "s|DB_PASSWORD=|DB_PASSWORD=${DB_PASSWORD}|g" .env
-sed -i "s|ADMIN_HTTPS=false|ADMIN_HTTPS=true|g" .env
+# 修复：使用更健壮的 sed 命令来替换 DB_PASSWORD
+sed -i "s/^DB_PASSWORD=.*/DB_PASSWORD=${DB_PASSWORD}/" .env
+# 确保 DB_USERNAME 和 DB_DATABASE 也匹配
+sed -i "s/^DB_USERNAME=.*/DB_USERNAME=dujiaoka/" .env
+sed -i "s/^DB_DATABASE=.*/DB_DATABASE=dujiaoka/" .env
 info ".env 文件创建并修正成功。"
 
 # 5. 构建和初始化
 info "正在构建并启动 Docker 容器，这可能需要几分钟..."
 docker-compose up -d --build
 info "容器启动成功。等待数据库初始化..."
-sleep 30
+
+# 修复：增加数据库就绪检查
+until docker-compose exec db mysqladmin ping -hlocalhost -u root -p"${DB_PASSWORD}" &> /dev/null; do
+  echo -n "."
+  sleep 1
+done
+echo -e "\n数据库服务已就绪。"
 
 # 6. 修复权限并初始化应用
 info "正在设置文件权限..."
@@ -264,8 +272,8 @@ echo -e "${GREEN}    🎉 恭喜！独角数卡已成功部署并完成所有修
 echo -e "${GREEN}=====================================================${PLAIN}"
 echo
 echo -e "后台登录地址: ${YELLOW}https://${DOMAIN_NAME}/admin${PLAIN}"
-echo -e "用户名:         ${YELLOW}admin${PLAIN}"
-echo -e "密码:           ${YELLOW}${ADMIN_PASSWORD}${PLAIN}"
+echo -e "用户名:           ${YELLOW}admin${PLAIN}"
+echo -e "密码:             ${YELLOW}${ADMIN_PASSWORD}${PLAIN}"
 echo
 echo -e "您可以将此脚本上传到 GitHub，方便在其他VPS上快速部署。"
 echo -e "祝您使用愉快！"
