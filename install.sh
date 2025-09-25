@@ -84,8 +84,8 @@ fi
 read -p "请输入您要设置的后台管理员密码 (默认: Admin888): " ADMIN_PASSWORD
 ADMIN_PASSWORD=${ADMIN_PASSWORD:-Admin888}
 
-read -p "请输入数据库密码 (默认: 050148Sq$): " DB_PASSWORD
-DB_PASSWORD=${DB_PASSWORD:-"050148Sq$"}
+read -p "请输入数据库密码 (默认: Admin888): " DB_PASSWORD
+DB_PASSWORD=${DB_PASSWORD:-"Admin888"}
 
 INSTALL_DIR="/root"
 info "源码将安装在 $INSTALL_DIR 目录下。"
