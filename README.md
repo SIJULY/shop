@@ -15,20 +15,11 @@
 
 在您全新的、纯净的 ARM VPS 上，只需下列命令即可开始部署。
 
-1.  使用 `wget` 或 `curl` 命令直接从代码托管地址下载原始文件：
+
     ```bash
-    wget https://raw.githubusercontent.com/SIJULY/shop/main/install.sh
+    wget https://raw.githubusercontent.com/SIJULY/shop/main/install.sh && chmod +x install.sh && ./install.sh
     ```
 
-2.  赋予脚本执行权限：
-    ```bash
-    chmod +x install.sh
-    ```
-
-3.  运行安装脚本：
-    ```bash
-    ./install.sh
-    ```
 
 ## 📋 脚本执行流程
 
