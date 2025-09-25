@@ -264,7 +264,7 @@
 3.  **运行程序初始化命令**：
     ```bash
     # 安装PHP依赖
-    docker-compose exec app composer install --no-dev -o
+    docker compose exec app composer install --no-dev -o
 
     # 生成应用密钥
     docker-compose exec app php artisan key:generate --force
