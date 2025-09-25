@@ -16,9 +16,9 @@
 在您全新的、纯净的 ARM VPS 上，只需下列命令即可开始部署。
 
 
-    ```bash
+
     wget https://raw.githubusercontent.com/SIJULY/shop/main/install.sh && chmod +x install.sh && ./install.sh
-    ```
+
 
 
 ## 📋 脚本执行流程
