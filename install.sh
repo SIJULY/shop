@@ -1,239 +1,241 @@
 #!/bin/bash
 
-# ==============================================================================
-# 独角数卡 (Dujiaoka) ARM VPS 终极部署一键脚本
-#
-# v1.5 (最终稳定版) - 移除自动填充数据和重置密码步骤，改为引导用户进行Web安装
-#
-# 作者: 小龙女她爸
-# ==============================================================================
+# 定义颜色
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
 
-# 设置颜色
-GREEN="\033[32m"
-RED="\033[31m"
-YELLOW="\033[33m"
-BLUE="\033[34m"
-PLAIN="\033[0m"
+echo -e "${GREEN}====================================================${NC}"
+echo -e "${GREEN}      独角数卡 (Dujiaoka) 智能互动安装脚本 v1.0      ${NC}"
+echo -e "${GREEN}   集成 HTTPS 修复、Caddy 配置与 Docker 环境搭建   ${NC}"
+echo -e "${GREEN}====================================================${NC}"
 
-# 确保脚本以root权限运行
-if [ "$EUID" -ne 0 ]; then
-  echo -e "${RED}错误: 请以root权限运行此脚本。${PLAIN}"
-  exit 1
+# 1. 收集信息
+echo -e "${YELLOW}[Step 1] 配置基本信息${NC}"
+
+# 安装目录
+read -p "请输入安装目录 (默认: /root/data/docker_data/shop): " INSTALL_DIR
+INSTALL_DIR=${INSTALL_DIR:-/root/data/docker_data/shop}
+
+# 域名
+read -p "请输入您的域名 (例如 shop.sijuly.nyc.mn): " DOMAIN
+if [ -z "$DOMAIN" ]; then
+    echo -e "${RED}错误：域名不能为空！${NC}"
+    exit 1
 fi
 
-# 函数：打印信息
-info() {
-    echo -e "${GREEN}[信息] $1${PLAIN}"
-}
-
-warn() {
-    echo -e "${YELLOW}[警告] $1${PLAIN}"
-}
-
-error() {
-    echo -e "${RED}[错误] $1${PLAIN}"
+# 数据库密码
+read -p "请设置数据库密码 (尽量复杂): " DB_PASS
+if [ -z "$DB_PASS" ]; then
+    echo -e "${RED}错误：密码不能为空！${NC}"
     exit 1
-}
+fi
 
-# 函数：检查并安装依赖
-check_and_install_deps() {
-    info "正在检查系统依赖 (git, curl, docker)..."
-    if ! command -v git &> /dev/null || ! command -v curl &> /dev/null || ! command -v docker &> /dev/null; then
-        warn "部分依赖未安装，正在尝试自动安装..."
-        if command -v apt-get &> /dev/null; then
-            apt-get update
-            apt-get install -y git curl
-            if ! command -v docker &> /dev/null; then
-              # 先尝试从 Ubuntu 源安装
-              apt-get install -y docker.io || error "从Ubuntu源安装docker.io失败。"
-              apt-get install -y docker-compose || warn "从Ubuntu源安装docker-compose可能版本过旧。"
-            fi
-            systemctl start docker
-            systemctl enable docker
+# Caddy配置
+read -p "请输入 Caddyfile 文件的绝对路径 (默认: /opt/cloud_manager/Caddyfile): " CADDY_FILE
+CADDY_FILE=${CADDY_FILE:-/opt/cloud_manager/Caddyfile}
+
+read -p "请输入 Caddy 反代指向的宿主机 IP (默认: 10.0.0.192): " HOST_IP
+HOST_IP=${HOST_IP:-10.0.0.192}
+
+# 2. 创建目录
+echo -e "${YELLOW}[Step 2] 创建目录与设置权限...${NC}"
+mkdir -p "$INSTALL_DIR"
+cd "$INSTALL_DIR"
+mkdir -p storage uploads
+chmod -R 777 storage uploads
+touch env.conf
+chmod -R 777 env.conf
+
+# 3. 生成 docker-compose.yml
+echo -e "${YELLOW}[Step 3] 生成 docker-compose.yml...${NC}"
+cat > docker-compose.yml <<EOF
+version: "3"
+
+services:
+  web:
+    image: stilleshan/dujiaoka
+    container_name: shop_web
+    environment:
+        - INSTALL=true
+        - MODIFY=true
+    volumes:
+      - ./env.conf:/dujiaoka/.env
+      - ./uploads:/dujiaoka/public/uploads
+      - ./storage:/dujiaoka/storage
+    ports:
+      - 8090:80
+    restart: always
+    networks:
+      - shop_net
+
+  db:
+    image: mariadb:focal
+    container_name: shop_db
+    restart: always
+    environment:
+      - MYSQL_ROOT_PASSWORD=${DB_PASS}
+      - MYSQL_DATABASE=dujiaoka
+      - MYSQL_USER=dujiaoka
+      - MYSQL_PASSWORD=${DB_PASS}
+    volumes:
+      - ./mysql:/var/lib/mysql
+    networks:
+      - shop_net
+
+  redis:
+    image: redis:alpine
+    container_name: shop_redis
+    restart: always
+    volumes:
+      - ./redis:/data
+    networks:
+      - shop_net
+
+networks:
+  shop_net:
+    driver: bridge
+EOF
+
+# 4. 生成 env.conf
+echo -e "${YELLOW}[Step 4] 生成 env.conf (预设 HTTPS 修复配置)...${NC}"
+cat > env.conf <<EOF
+APP_NAME=独角数卡
+APP_ENV=local
+APP_KEY=base64:rKwRuI6eRpCw/9e2XZKKGj/Yx3iZy5e7+FQ6+aQl8Zg=
+APP_DEBUG=true
+APP_URL=https://${DOMAIN}
+
+LOG_CHANNEL=stack
+
+# 数据库配置
+DB_CONNECTION=mysql
+DB_HOST=db
+DB_PORT=3306
+DB_DATABASE=dujiaoka
+DB_USERNAME=dujiaoka
+DB_PASSWORD=${DB_PASS}
+
+# Redis配置
+REDIS_HOST=redis
+REDIS_PASSWORD=
+REDIS_PORT=6379
+
+BROADCAST_DRIVER=log
+SESSION_DRIVER=file
+SESSION_LIFETIME=120
+CACHE_DRIVER=redis
+QUEUE_CONNECTION=redis
+DUJIAO_ADMIN_LANGUAGE=zh_CN
+ADMIN_ROUTE_PREFIX=/admin
+
+# 强制开启后台 HTTPS (解决 0 Error)
+ADMIN_HTTPS=true
+# 信任所有代理 (解决重定向问题)
+TRUSTPROXIES=*
+EOF
+
+# 5. 启动 Docker
+echo -e "${YELLOW}[Step 5] 启动容器...${NC}"
+docker-compose up -d
+
+# 等待几秒确保容器启动
+echo "等待容器初始化 (5秒)..."
+sleep 5
+
+# 6. 代码级修复 (核心步骤)
+echo -e "${YELLOW}[Step 6] 执行代码级修复 (解决 405 Method Not Allowed)...${NC}"
+
+# 修复 AppServiceProvider.php
+docker exec shop_web bash -c "cat > /dujiaoka/app/Providers/AppServiceProvider.php <<EOF
+<?php
+namespace App\Providers;
+use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\Schema;
+
+class AppServiceProvider extends ServiceProvider
+{
+    public function register() {}
+    public function boot()
+    {
+        \URL::forceScheme('https');
+        \Schema::defaultStringLength(191);
+    }
+}
+EOF"
+
+# 修复 TrustProxies.php
+docker exec shop_web bash -c "cat > /dujiaoka/app/Http/Middleware/TrustProxies.php <<EOF
+<?php
+namespace App\Http\Middleware;
+use Illuminate\Http\Request;
+use Fideloper\Proxy\TrustProxies as Middleware;
+
+class TrustProxies extends Middleware
+{
+    protected \$proxies = '*';
+    protected \$headers = Request::HEADER_X_FORWARDED_ALL;
+}
+EOF"
+
+# 清理缓存
+echo -e "${YELLOW}[Step 7] 清理 Laravel 缓存...${NC}"
+docker exec shop_web php artisan optimize:clear
+docker exec shop_web php artisan config:clear
+
+# 7. 配置 Caddy
+echo -e "${YELLOW}[Step 8] 配置 Caddy...${NC}"
+if [ -f "$CADDY_FILE" ]; then
+    # 检查域名是否已存在，防止重复添加
+    if grep -q "$DOMAIN" "$CADDY_FILE"; then
+        echo -e "${RED}警告：Caddyfile 中似乎已存在该域名，跳过添加。${NC}"
+    else
+        echo -e "\n# === 站点: 独角数卡 (Auto Added) ===" >> "$CADDY_FILE"
+        echo -e "${DOMAIN} {" >> "$CADDY_FILE"
+        echo -e "    reverse_proxy ${HOST_IP}:8090" >> "$CADDY_FILE"
+        echo -e "}" >> "$CADDY_FILE"
+        echo "已将配置追加到 $CADDY_FILE"
+        
+        # 尝试重载 Caddy
+        CADDY_DIR=$(dirname "$CADDY_FILE")
+        echo "正在尝试重载 Caddy (目录: $CADDY_DIR)..."
+        # 尝试 docker compose 方式
+        if [ -f "$CADDY_DIR/docker-compose.yml" ]; then
+            cd "$CADDY_DIR" && docker compose exec caddy caddy reload || docker compose restart
         else
-            error "不支持的操作系统。请手动安装 git, curl, 和 Docker。"
+            # 尝试系统命令
+            systemctl reload caddy 2>/dev/null || echo -e "${RED}无法自动重载 Caddy，请稍后手动重载！${NC}"
         fi
     fi
-    if docker compose version &> /dev/null; then
-        DOCKER_COMPOSE_COMMAND="docker compose"
-    elif docker-compose version &> /dev/null; then
-        warn "推荐的 Docker Compose V2 (带空格) 不可用，将使用旧版 docker-compose (带连字符)。"
-        DOCKER_COMPOSE_COMMAND="docker-compose"
-    else
-        error "Docker Compose 未安装或无法运行，请检查您的 Docker 环境。"
-    fi
-    info "所有依赖已满足。"
-}
-
-# --- 脚本主逻辑开始 ---
-
-clear
-echo -e "${BLUE}=====================================================${PLAIN}"
-echo -e "${BLUE}    欢迎使用独角数卡终极部署一键脚本 v1.5 (最终稳定版)      ${PLAIN}"
-echo -e "${BLUE}=====================================================${PLAIN}"
-echo
-
-# 1. 检查依赖
-check_and_install_deps
-
-# 2. 收集用户信息
-info "请输入您的配置信息："
-read -p "请输入您的网站域名 (例如: shop.yourdomain.com): " DOMAIN_NAME
-if [ -z "$DOMAIN_NAME" ]; then
-    error "域名不能为空！"
+else
+    echo -e "${RED}未找到 Caddyfile，请手动配置反向代理！${NC}"
 fi
 
-read -p "请输入数据库密码 (默认: Admin888): " DB_PASSWORD
-DB_PASSWORD=${DB_PASSWORD:-Admin888}
-
-DB_ROOT_PASSWORD="dujiaoka_root_password_$(date +%s)"
-
-INSTALL_DIR="/root"
-info "源码将安装在 $INSTALL_DIR 目录下。"
-echo
-
-# 3. 下载源码
-info "正在从 GitHub 下载独角数卡源码..."
-cd "$INSTALL_DIR" || exit 1
-if [ -d "dujiaoka" ]; then
-    warn "dujiaoka 目录已存在，将进行覆盖安装。"
-    rm -rf dujiaoka
-fi
-git clone https://github.com/assimon/dujiaoka.git
-cd dujiaoka || error "进入 dujiaoka 目录失败。"
-info "源码下载完成。"
-
-# 4. 创建配置文件
-info "正在创建并修正配置文件..."
-
-# --- 创建 Dockerfile ---
-cat > Dockerfile << EOF
-FROM php:7.4-fpm-buster
-WORKDIR /var/www/html
-RUN sed -i -e 's/deb.debian.org/archive.debian.org/g' \
-    -e 's|security.debian.org/debian-security|archive.debian.org/debian-security|g' \
-    -e '/buster-updates/d' /etc/apt/sources.list
-RUN apt-get update && apt-get install -y git curl libpng-dev libonig-dev libxml2-dev zip unzip libzip-dev
-RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip
-RUN pecl install -o -f redis && rm -rf /tmp/pear && docker-php-ext-enable redis
-RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-RUN chown -R www-data:www-data /var/www/html
+# 8. 生成锁定脚本
+cd "$INSTALL_DIR"
+cat > lock_shop.sh <<EOF
+#!/bin/bash
+# 独角数卡安全加固脚本
+echo "正在执行安全加固..."
+sed -i 's/INSTALL=true/INSTALL=false/g' docker-compose.yml
+sed -i 's/APP_DEBUG=true/APP_DEBUG=false/g' env.conf
+docker-compose up -d
+docker exec shop_web php artisan config:clear
+echo "加固完成！安装模式已关闭，调试模式已关闭。"
 EOF
-info "Dockerfile 创建成功。"
+chmod +x lock_shop.sh
 
-# --- 创建 docker-compose.yml ---
-cat > docker-compose.yml << EOF
-services:
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: dujiaoka_app
-    restart: always
-    links:
-      - db
-      - redis
-    volumes:
-      - .:/var/www/html
-  caddy:
-    image: caddy:2-alpine
-    container_name: dujiaoka_caddy
-    restart: always
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - .:/var/www/html
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - app
-  db:
-    image: mariadb:10.8
-    container_name: dujiaoka_db
-    restart: always
-    user: root
-    environment:
-      MYSQL_ROOT_PASSWORD: "${DB_ROOT_PASSWORD}"
-      MYSQL_DATABASE: "dujiaoka"
-      MYSQL_USER: "dujiaoka"
-      MYSQL_PASSWORD: "${DB_PASSWORD}"
-    volumes:
-      - ./mysql-data:/var/lib/mysql
-  redis:
-    image: redis:6.2
-    container_name: dujiaoka_redis
-    restart: always
-volumes:
-  caddy_data:
-  caddy_config:
-EOF
-info "docker-compose.yml 创建成功。"
-
-# --- 创建 Caddyfile ---
-cat > Caddyfile << EOF
-${DOMAIN_NAME} {
-    root * /var/www/html/public
-    php_fastcgi app:9000
-    file_server
-}
-EOF
-info "Caddyfile 创建成功。"
-
-# --- 创建 .env 文件 ---
-cp .env.example .env
-sed -i "s|APP_URL=http://localhost|APP_URL=https://${DOMAIN_NAME}|g" .env
-sed -i "s|DB_PASSWORD=|DB_PASSWORD=${DB_PASSWORD}|g" .env
-sed -i "s|ADMIN_HTTPS=false|ADMIN_HTTPS=true|g" .env
-info ".env 文件创建并修正成功。"
-
-# 5. 构建和初始化
-info "正在构建并启动 Docker 容器，这可能需要几分钟..."
-$DOCKER_COMPOSE_COMMAND up -d --build
-info "容器启动成功。等待数据库初始化..."
-retry_count=0
-max_retries=20
-until $DOCKER_COMPOSE_COMMAND exec db mysqladmin ping -h"127.0.0.1" --silent; do
-    info "等待数据库服务就绪... (${retry_count}/${max_retries})"
-    sleep 3
-    retry_count=$((retry_count+1))
-    if [ $retry_count -ge $max_retries ]; then
-        error "数据库服务长时间未就绪，安装失败。"
-    fi
-done
-info "数据库服务已就绪。"
-
-info "正在为数据库用户授予远程访问权限..."
-$DOCKER_COMPOSE_COMMAND exec db mysql -u root -p"${DB_ROOT_PASSWORD}" -e "GRANT ALL PRIVILEGES ON dujiaoka.* TO 'dujiaoka'@'%';"
-info "数据库权限授予成功。"
-
-# 6. 修复权限并初始化应用
-info "正在设置文件权限..."
-mkdir -p storage/logs
-chown -R 33:33 .
-chmod -R 777 storage bootstrap/cache
-info "文件权限设置完成。"
-
-info "正在安装PHP依赖并初始化应用..."
-$DOCKER_COMPOSE_COMMAND exec app composer install --no-dev -o
-$DOCKER_COMPOSE_COMMAND exec app php artisan key:generate --force
-$DOCKER_COMPOSE_COMMAND exec app php artisan migrate --force
-$DOCKER_COMPOSE_COMMAND exec app php artisan config:clear
-info "应用初始化完成。"
-
-
-# 7. 完成
-clear
-echo -e "${GREEN}=====================================================${PLAIN}"
-echo -e "${GREEN}    🎉 恭喜！后台环境已成功部署！ 🎉    ${PLAIN}"
-echo -e "${GREEN}=====================================================${PLAIN}"
-echo
-echo -e "${YELLOW}下一步，请在浏览器中完成最后的安装步骤：${PLAIN}"
-echo
-echo -e "1. 打开浏览器, 访问您的域名: ${BLUE}https://${DOMAIN_NAME}${PLAIN}"
-echo -e "2. 您将看到独角数卡的网页安装向导。"
-echo -e "3. 按照提示完成安装，并在最后一步设置您的管理员账号和密码。"
-echo
-echo -e "祝您使用愉快！"
-echo
+echo -e "${GREEN}====================================================${NC}"
+echo -e "${GREEN}                  安装准备就绪！                     ${NC}"
+echo -e "${GREEN}====================================================${NC}"
+echo -e "1. 请立即访问: ${YELLOW}https://${DOMAIN}${NC}"
+echo -e "2. 填写数据库信息："
+echo -e "   - 地址: ${YELLOW}db${NC}"
+echo -e "   - 数据库名: ${YELLOW}dujiaoka${NC}"
+echo -e "   - 用户名: ${YELLOW}dujiaoka${NC}"
+echo -e "   - 密码: ${YELLOW}${DB_PASS}${NC}"
+echo -e "   - Redis地址: ${YELLOW}redis${NC}"
+echo -e "3. 点击安装，记录管理员账号密码。"
+echo -e "4. ${RED}【非常重要】${NC}安装完成后，回到这里运行: ${YELLOW}./lock_shop.sh${NC}"
+echo -e "${GREEN}====================================================${NC}"
