@@ -7,12 +7,15 @@
 ## ✨ 特性
 
 * **⚡️ 极速安装:**: 摒弃本地编译，直接拉取 sijuly0713/dujiaoka 预编译镜像，部署时间从 20 分钟缩短至 30 秒。
+  
 * **🧠 智能双模:**:
   
      域名模式: 自动申请 SSL 证书，开启 HTTPS，强制后台安全连接。
 
      IP 模式: 自动识别 IP 输入，支持自定义端口，适合内网或无域名测试。
-* **🛠 全能管理菜单:**: 内置 安装、更新 (保留数据)、卸载 (可选删库) 功能。
+  
+* **🛠 全能管理菜单:** 内置 安装、更新 (保留数据)、卸载 (可选删库) 功能。
+  
 * **🛡Caddy 自动 HTTPS**: 使用 Caddy 作为网页服务器，自动为您配置 SSL 证书，实现 HTTPS 加密访问。
 
 ## 🚀 一键安装
@@ -35,29 +38,3 @@ wget https://raw.githubusercontent.com/SIJULY/shop/main/install.sh && chmod +x i
 8. Redis 端口6379保持默认
 
 
-
-### 第六步：常见问题与维护
-
-* **如何查看日志？**
-    * 查看程序日志: `docker-compose logs -f app`
-    * 查看网页服务器日志: `docker-compose logs -f caddy`
-
-* **如何停止/启动？**
-    * 停止: `docker-compose down`
-    * 启动: `docker-compose up -d`
-
-* **如果安装彻底失败，如何从头再来？**
-    如果遇到无法解决的问题，可以彻底清除数据，然后从本教程第二步重新开始。
-    ```bash
-    # 停止并删除所有容器、网络
-    docker-compose down
-
-    # 删除所有数据库数据
-    sudo rm -rf ./mysql-data
-
-    # 删除Caddy证书数据
-    sudo rm -rf ./caddy_data ./caddy_config
-    ```
-
----
-至此，您已完成独角数卡的所有部署和修正工作，可以开始正常使用了。
