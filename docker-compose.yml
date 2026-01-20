@@ -11,12 +11,27 @@ services:
       - ./env.conf:/dujiaoka/.env
       - ./uploads:/dujiaoka/public/uploads
       - ./storage:/dujiaoka/storage
-    ports:
-      - 8080:80
+    # 端口不再直接映射到宿主机，而是通过内部网络暴露给 Caddy
+    expose:
+      - 80
     restart: always
     links:
       - db
       - redis
+
+  caddy:
+    image: caddy:alpine
+    container_name: shop_caddy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
 
   db:
     image: mariadb:10.5
@@ -36,3 +51,7 @@ services:
     restart: always
     volumes:
       - ./redis-data:/data
+
+volumes:
+  caddy_data:
+  caddy_config:
