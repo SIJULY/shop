@@ -12,7 +12,7 @@ services:
       - ./uploads:/dujiaoka/public/uploads
       - ./storage:/dujiaoka/storage
     ports:
-      - 8080:80   # 这里将容器80端口映射到宿主机8080，你可以改成 80:80
+      - 8080:80
     restart: always
     links:
       - db
