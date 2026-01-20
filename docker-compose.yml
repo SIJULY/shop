@@ -2,7 +2,7 @@ version: "3"
 
 services:
   web:
-    image: stilleshan/dujiaoka
+    image: sijuly0713/dujiaoka
     container_name: shop_web
     environment:
       - INSTALL=true
