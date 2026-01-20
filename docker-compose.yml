@@ -1,0 +1,38 @@
+version: "3"
+
+services:
+  web:
+    image: stilleshan/dujiaoka
+    container_name: shop_web
+    environment:
+      - INSTALL=true
+      - MODIFY=true
+    volumes:
+      - ./env.conf:/dujiaoka/.env
+      - ./uploads:/dujiaoka/public/uploads
+      - ./storage:/dujiaoka/storage
+    ports:
+      - 8080:80   # 这里将容器80端口映射到宿主机8080，你可以改成 80:80
+    restart: always
+    links:
+      - db
+      - redis
+
+  db:
+    image: mariadb:10.5
+    container_name: shop_db
+    restart: always
+    environment:
+      - MYSQL_ROOT_PASSWORD=你的数据库密码  # <--- 请修改这里
+      - MYSQL_DATABASE=dujiaoka
+      - MYSQL_USER=dujiaoka
+      - MYSQL_PASSWORD=你的数据库密码     # <--- 请修改这里
+    volumes:
+      - ./mysql-data:/var/lib/mysql
+
+  redis:
+    image: redis:alpine
+    container_name: shop_redis
+    restart: always
+    volumes:
+      - ./redis-data:/data
