@@ -23,10 +23,10 @@ services:
     container_name: shop_db
     restart: always
     environment:
-      - MYSQL_ROOT_PASSWORD=你的数据库密码  # <--- 请修改这里
+      - MYSQL_ROOT_PASSWORD=你的数据库密码
       - MYSQL_DATABASE=dujiaoka
       - MYSQL_USER=dujiaoka
-      - MYSQL_PASSWORD=你的数据库密码     # <--- 请修改这里
+      - MYSQL_PASSWORD=你的数据库密码
     volumes:
       - ./mysql-data:/var/lib/mysql
 
