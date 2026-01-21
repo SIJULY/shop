@@ -39,7 +39,7 @@ check_env() {
 }
 
 # ====================================================
-# 函数：安装/重装
+# 函数：安装
 # ====================================================
 install_shop() {
     check_env
@@ -55,6 +55,7 @@ install_shop() {
 
     RAW_INPUT=$(echo "$USER_INPUT" | sed 's~http[s]*://~~g')
     
+    # 判断 IP 还是 域名
     if [[ $RAW_INPUT =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         IS_IP_MODE="true"
         echo -e "${YELLOW}[识别] 检测到您使用的是 IP 模式。${NC}"
@@ -73,7 +74,7 @@ install_shop() {
         echo -e "将在端口 ${GREEN}80/443${NC} 上部署 HTTPS 服务。"
     fi
 
-    # 检测目录是否存在，避免暴力覆盖导致配置丢失
+    # 检查目录
     if [ -d "$INSTALL_DIR" ]; then
         echo -e "${RED}[警告] 检测到安装目录已存在！${NC}"
         read -p "是否覆盖安装？(y/n): " OVERWRITE
@@ -85,6 +86,7 @@ install_shop() {
     cd "$INSTALL_DIR"
 
     echo -e "${GREEN}[1/5] 下载配置文件...${NC}"
+    # 从你的 GitHub 下载 (现在你的 GitHub 上已经是正确的配置了)
     wget -O docker-compose.yml https://raw.githubusercontent.com/SIJULY/shop/main/docker-compose.yml
     wget -O env.conf https://raw.githubusercontent.com/SIJULY/shop/main/env.conf
 
@@ -105,11 +107,9 @@ EOF
     fi
 
     echo -e "${GREEN}[3/5] 配置参数...${NC}"
-    # 生成随机 Key
     NEW_APP_KEY="base64:$(openssl rand -base64 32)"
     sed -i "s|APP_KEY=APP_KEY|APP_KEY=${NEW_APP_KEY}|g" env.conf
     
-    # 替换 URL 和 密码
     sed -i "s|APP_URL=APP_URL|APP_URL=${FINAL_URL}|g" env.conf
     sed -i "s|DB_PASSWORD=DB_PASSWORD|DB_PASSWORD=${USER_DB_PASS}|g" env.conf
     sed -i "s|MYSQL_ROOT_PASSWORD=dujiaoka|MYSQL_ROOT_PASSWORD=${USER_DB_PASS}|g" docker-compose.yml
@@ -120,7 +120,6 @@ EOF
         sed -i "s|- \"443:443\"|#- \"443:443\"|g" docker-compose.yml
     fi
 
-    # 写入 HTTPS 配置
     echo "ADMIN_HTTPS=${HTTPS_STATE}" >> env.conf
 
     echo -e "${GREEN}[4/5] 设置权限...${NC}"
@@ -130,6 +129,10 @@ EOF
     echo -e "${GREEN}[5/5] 启动服务...${NC}"
     docker-compose down 2>/dev/null
     docker-compose up -d
+    
+    # 增加一步：启动后再次确保缓存权限正确
+    sleep 5
+    docker-compose exec -T web chmod -R 777 storage bootstrap/cache 2>/dev/null
 
     echo -e "${GREEN}==========================================${NC}"
     echo -e "${GREEN}             安装成功！                   ${NC}"
@@ -138,18 +141,22 @@ EOF
     echo -e "${GREEN}==========================================${NC}"
 }
 
+# ====================================================
+# 函数：更新
+# ====================================================
 update_shop() {
     if [ ! -d "$INSTALL_DIR" ]; then echo -e "${RED}[错误] 目录不存在${NC}"; return; fi
     cd "$INSTALL_DIR"
     docker-compose pull
     docker-compose up -d
-    # 修复更新后的权限问题
-    docker-compose exec web chmod -R 777 storage bootstrap/cache
     docker-compose exec web php artisan optimize:clear
     docker-compose exec web php artisan migrate --force
     echo -e "${GREEN}更新完成！${NC}"
 }
 
+# ====================================================
+# 函数：卸载
+# ====================================================
 uninstall_shop() {
     if [ ! -d "$INSTALL_DIR" ]; then echo -e "${RED}[错误] 目录不存在${NC}"; return; fi
     read -p "确定卸载？(y/n): " CONFIRM
