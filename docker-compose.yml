@@ -2,6 +2,7 @@ version: "3"
 
 services:
   web:
+    # 核心修改：使用支持 ARM/AMD 双架构的镜像
     image: ghcr.io/apocalypsor/dujiaoka:latest
     container_name: shop_web
     environment:
@@ -11,7 +12,7 @@ services:
       - ./env.conf:/dujiaoka/.env
       - ./uploads:/dujiaoka/public/uploads
       - ./storage:/dujiaoka/storage
-    # 端口不再直接映射到宿主机，而是通过内部网络暴露给 Caddy
+    # 端口暴露给 Caddy 容器，不直接映射到宿主机
     expose:
       - 80
     restart: always
@@ -38,10 +39,10 @@ services:
     container_name: shop_db
     restart: always
     environment:
-      - MYSQL_ROOT_PASSWORD=你的数据库密码
+      - MYSQL_ROOT_PASSWORD=dujiaoka
       - MYSQL_DATABASE=dujiaoka
       - MYSQL_USER=dujiaoka
-      - MYSQL_PASSWORD=你的数据库密码
+      - MYSQL_PASSWORD=dujiaoka
     volumes:
       - ./mysql-data:/var/lib/mysql
 
