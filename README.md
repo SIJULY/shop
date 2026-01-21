@@ -27,13 +27,13 @@ wget https://raw.githubusercontent.com/SIJULY/shop/main/install.sh && chmod +x i
 
 ![telegram-cloud-photo-size-1-5150420585916599219-y](https://github.com/user-attachments/assets/cd6b58b3-4ba1-4301-b93a-d10d5ec839e3)
 
-1. 数据库配置 (最关键部分)选项填写内容说明MySQL 数据库地址db必须填这个！ (代表 Docker 里的数据库容器)
-2. MySQL 端口3306保持默认MySQL
-3. 数据库名dujiaoka保持默认MySQL
-4. 用户名dujiaoka注意： 默认是 root，建议改为 dujiaoka
-5. MySQL 密码你刚才在脚本里设置的密码就是安装脚本运行时让你输入的那个密码
-6. Redis 配置选项填写内容说明Redis 连接地址redis必须填这个！ (代表 Docker 里的 Redis 容器)Redis
-7. 密码(留空)不要填任何东西
-8. Redis 端口6379保持默认
+1. MySQL数据库地址：     db            必须填这个！ (代表 Docker 里的数据库容器)
+2. MySQL端口：         3306           保持默认MySQL
+3. 数据库名：         dujiaoka         保持默认MySQL
+4. MySQL用户名：      dujiaoka         默认是 root，建议改为 dujiaoka
+5. MySQL 密码：      你刚才在脚本里设置的密码就是安装脚本运行时让你输入的那个密码
+6. Redis 连接地址：   redis            必须填这个！ (代表 Docker 里的 Redis 容器)Redis
+7. 密码：            (留空)不要填任何东西
+8. Redis 端口：       6379保持默认
 
 
