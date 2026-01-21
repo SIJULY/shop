@@ -99,6 +99,7 @@ install_shop() {
     cd "$INSTALL_DIR"
 
     echo -e "${GREEN}[1/5] 下载配置文件...${NC}"
+    # 这里下载的是你 GitHub 上默认的文件（可能是旧镜像，没关系，后面会自动改）
     wget -O docker-compose.yml https://raw.githubusercontent.com/SIJULY/shop/main/docker-compose.yml
     wget -O env.conf https://raw.githubusercontent.com/SIJULY/shop/main/env.conf
 
@@ -127,6 +128,20 @@ EOF
     fi
 
     echo -e "${GREEN}[3/5] 配置参数...${NC}"
+
+    # ==========================================
+    # 【新增】架构自动识别与镜像修正 (核心修改)
+    # ==========================================
+    ARCH=$(uname -m)
+    if [[ "$ARCH" == "aarch64" ]]; then
+        echo -e "${YELLOW}[系统] 检测到 ARM64 架构 (Oracle Cloud/Mac M1)，自动切换为兼容镜像...${NC}"
+        # 强制将镜像替换为 apocalypsor 的兼容版
+        sed -i 's|image: .*dujiaoka.*|image: ghcr.io/apocalypsor/dujiaoka:latest|g' docker-compose.yml
+    else
+        echo -e "${GREEN}[系统] 检测到 x86_64 架构，使用默认配置。${NC}"
+    fi
+    # ==========================================
+
     # 生成随机 Key
     NEW_APP_KEY="base64:$(openssl rand -base64 32)"
     sed -i "s|APP_KEY=.*|APP_KEY=${NEW_APP_KEY}|g" env.conf
