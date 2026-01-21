@@ -2,7 +2,7 @@ version: "3"
 
 services:
   web:
-    image: sijuly0713/dujiaoka
+    image: ghcr.io/apocalypsor/dujiaoka:latest
     container_name: shop_web
     environment:
       - INSTALL=true
