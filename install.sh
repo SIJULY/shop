@@ -9,6 +9,9 @@ NC='\033[0m'
 # 固定安装目录
 INSTALL_DIR="/root/dujiaoka_sijuly"
 
+# ====================================================
+# 函数：环境检查
+# ====================================================
 check_env() {
     for cmd in wget openssl curl; do
         if ! command -v $cmd &> /dev/null; then
@@ -35,6 +38,9 @@ check_env() {
     fi
 }
 
+# ====================================================
+# 函数：安装/重装
+# ====================================================
 install_shop() {
     check_env
     
@@ -67,6 +73,7 @@ install_shop() {
         echo -e "将在端口 ${GREEN}80/443${NC} 上部署 HTTPS 服务。"
     fi
 
+    # 检测目录是否存在，避免暴力覆盖导致配置丢失
     if [ -d "$INSTALL_DIR" ]; then
         echo -e "${RED}[警告] 检测到安装目录已存在！${NC}"
         read -p "是否覆盖安装？(y/n): " OVERWRITE
@@ -78,7 +85,6 @@ install_shop() {
     cd "$INSTALL_DIR"
 
     echo -e "${GREEN}[1/5] 下载配置文件...${NC}"
-    # 从 GitHub 下载最新的配置
     wget -O docker-compose.yml https://raw.githubusercontent.com/SIJULY/shop/main/docker-compose.yml
     wget -O env.conf https://raw.githubusercontent.com/SIJULY/shop/main/env.conf
 
@@ -99,6 +105,7 @@ EOF
     fi
 
     echo -e "${GREEN}[3/5] 配置参数...${NC}"
+    # 生成随机 Key
     NEW_APP_KEY="base64:$(openssl rand -base64 32)"
     sed -i "s|APP_KEY=APP_KEY|APP_KEY=${NEW_APP_KEY}|g" env.conf
     
@@ -113,7 +120,7 @@ EOF
         sed -i "s|- \"443:443\"|#- \"443:443\"|g" docker-compose.yml
     fi
 
-    # 自动配置 HTTPS 状态 (防止死循环)
+    # 写入 HTTPS 配置
     echo "ADMIN_HTTPS=${HTTPS_STATE}" >> env.conf
 
     echo -e "${GREEN}[4/5] 设置权限...${NC}"
@@ -136,6 +143,8 @@ update_shop() {
     cd "$INSTALL_DIR"
     docker-compose pull
     docker-compose up -d
+    # 修复更新后的权限问题
+    docker-compose exec web chmod -R 777 storage bootstrap/cache
     docker-compose exec web php artisan optimize:clear
     docker-compose exec web php artisan migrate --force
     echo -e "${GREEN}更新完成！${NC}"
@@ -147,6 +156,7 @@ uninstall_shop() {
     if [[ "$CONFIRM" != "y" ]]; then return; fi
     cd "$INSTALL_DIR"
     docker-compose down
+    cd ..
     rm -rf "$INSTALL_DIR"
     echo -e "${GREEN}卸载完成。${NC}"
 }
