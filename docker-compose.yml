@@ -2,8 +2,7 @@ version: "3"
 
 services:
   web:
-    # 核心修改：使用支持 ARM/AMD 双架构的镜像
-    image: ghcr.io/apocalypsor/dujiaoka:latest
+    image: sijuly0713/dujiaoka
     container_name: shop_web
     environment:
       - INSTALL=true
@@ -12,7 +11,6 @@ services:
       - ./env.conf:/dujiaoka/.env
       - ./uploads:/dujiaoka/public/uploads
       - ./storage:/dujiaoka/storage
-    # 端口暴露给 Caddy 容器，不直接映射到宿主机
     expose:
       - 80
     restart: always
